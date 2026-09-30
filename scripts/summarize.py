@@ -140,7 +140,7 @@ def main():
 
     parser.add_argument(
         "--provider",
-        choices=["fake", "openai"],
+        choices=["fake", "openai", "anthropic"],
         required=True,
         help="Provider whose baseline run should be summarized.",
     )

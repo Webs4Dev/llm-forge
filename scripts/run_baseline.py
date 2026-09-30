@@ -4,7 +4,6 @@ import sys
 import time
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
@@ -13,6 +12,7 @@ from core.cost import calculate_cost, load_pricing
 from core.schema import validate_output
 from providers.fake import FakeProvider
 from providers.openai import OpenAIProvider
+from providers.anthropic import AnthropicProvider
 
 
 DATASET_PATH = PROJECT_ROOT / "data" / "datasets" / "tickets-seed.jsonl"
@@ -61,6 +61,11 @@ def create_provider(provider_name):
             model="gpt-5.6-luna"
         )
 
+    if provider_name == "anthropic":
+        return AnthropicProvider(
+            model="claude-haiku-4-5"
+        )
+
     raise ValueError(
         f"Unsupported provider: {provider_name}"
     )
@@ -69,6 +74,9 @@ def create_provider(provider_name):
 def get_model_name(provider_name):
     if provider_name == "openai":
         return "gpt-5.6-luna"
+
+    if provider_name == "anthropic":
+        return "claude-haiku-4-5"
 
     return "fake"
 
@@ -93,39 +101,53 @@ def get_pricing(provider_name):
 
 def run_baseline(provider_name, limit=None):
 
-    if provider_name == "openai" and limit is None:
+    if provider_name in {"openai", "anthropic"} and limit is None:
         raise ValueError(
-            "For OpenAI, you must specify --limit "
+            f"For {provider_name}, you must specify --limit "
             "to avoid accidentally making a large number "
             "of API requests."
         )
 
     tickets = load_tickets()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
     provider = create_provider(provider_name)
 
     model_name = get_model_name(provider_name)
 
-    input_price, output_price = get_pricing(provider_name)
+    input_price, output_price = get_pricing(
+        provider_name
+    )
 
     output_path = (
-        OUTPUT_DIR / f"baseline_{provider_name}.jsonl"
+        OUTPUT_DIR
+        / f"baseline_{provider_name}.jsonl"
     )
 
     total_requests = 0
 
-    with open(output_path, "w", encoding="utf-8") as output_file:
+    with open(
+        output_path,
+        "w",
+        encoding="utf-8"
+    ) as output_file:
 
         for ticket in tickets:
 
             case_id = ticket["case_id"]
+
             ticket_text = ticket["input"]["ticket_text"]
 
             for repeat in range(1, REPEATS + 1):
 
-                if limit is not None and total_requests >= limit:
+                if (
+                    limit is not None
+                    and total_requests >= limit
+                ):
                     break
 
                 start = time.perf_counter()
@@ -148,7 +170,9 @@ def run_baseline(provider_name, limit=None):
                     output_price_per_1m=output_price,
                 )
 
-                parse_success = is_valid_json(result.text)
+                parse_success = is_valid_json(
+                    result.text
+                )
 
                 schema_valid, schema_error = validate_output(
                     result.text
@@ -199,7 +223,11 @@ def main():
 
     parser.add_argument(
         "--provider",
-        choices=["fake", "openai"],
+        choices=[
+            "fake",
+            "openai",
+            "anthropic",
+        ],
         required=True,
         help="Provider to use for the baseline run.",
     )
