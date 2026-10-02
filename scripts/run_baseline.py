@@ -7,12 +7,12 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from core.generate import generate
-from core.cost import calculate_cost, load_pricing
-from core.schema import validate_output
-from providers.fake import FakeProvider
-from providers.openai import OpenAIProvider
-from providers.anthropic import AnthropicProvider
+from src.core.generate import generate
+from src.core.cost import calculate_cost, load_pricing
+from src.core.schema import validate_output
+from src.providers.fake import FakeProvider
+from src.providers.openai import OpenAIProvider
+from src.providers.anthropic import AnthropicProvider
 
 
 DATASET_PATH = PROJECT_ROOT / "data" / "datasets" / "tickets-seed.jsonl"
@@ -110,6 +110,21 @@ def run_baseline(provider_name, limit=None):
 
     tickets = load_tickets()
 
+    # --limit now means number of UNIQUE TICKETS.
+    if limit is not None:
+        if limit <= 0:
+            raise ValueError(
+                "--limit must be greater than 0."
+            )
+
+        if limit > len(tickets):
+            raise ValueError(
+                f"--limit cannot be greater than the "
+                f"number of tickets ({len(tickets)})."
+            )
+
+        tickets = tickets[:limit]
+
     OUTPUT_DIR.mkdir(
         parents=True,
         exist_ok=True
@@ -143,12 +158,6 @@ def run_baseline(provider_name, limit=None):
             ticket_text = ticket["input"]["ticket_text"]
 
             for repeat in range(1, REPEATS + 1):
-
-                if (
-                    limit is not None
-                    and total_requests >= limit
-                ):
-                    break
 
                 start = time.perf_counter()
 
@@ -211,6 +220,8 @@ def run_baseline(provider_name, limit=None):
     print("Baseline complete.")
     print(f"Provider: {provider_name}")
     print(f"Model: {model_name}")
+    print(f"Unique tickets: {len(tickets)}")
+    print(f"Repeats per ticket: {REPEATS}")
     print(f"Total requests: {total_requests}")
     print(f"Output: {output_path}")
 
@@ -236,7 +247,7 @@ def main():
         "--limit",
         type=int,
         default=None,
-        help="Maximum number of requests to run.",
+        help="Number of unique tickets to run.",
     )
 
     args = parser.parse_args()
