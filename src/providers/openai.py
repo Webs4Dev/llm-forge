@@ -8,6 +8,7 @@ from providers.base import GenerationResult, Provider
 
 load_dotenv()
 
+
 class OpenAIProvider(Provider):
 
     def __init__(self, model: str):
@@ -44,6 +45,55 @@ class OpenAIProvider(Provider):
                     "content": user_prompt,
                 },
             ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "support_ticket",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "enum": [
+                                    "billing",
+                                    "technical",
+                                    "account",
+                                    "delivery",
+                                    "refund",
+                                    "fraud",
+                                    "general",
+                                ],
+                            },
+                            "urgency": {
+                                "type": "string",
+                                "enum": [
+                                    "low",
+                                    "medium",
+                                    "high",
+                                ],
+                            },
+                            "summary": {
+                                "type": "string",
+                            },
+                            "suggested_reply": {
+                                "type": "string",
+                            },
+                            "needs_escalation": {
+                                "type": "boolean",
+                            },
+                        },
+                        "required": [
+                            "category",
+                            "urgency",
+                            "summary",
+                            "suggested_reply",
+                            "needs_escalation",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            },
             max_completion_tokens=max_tokens,
         )
 

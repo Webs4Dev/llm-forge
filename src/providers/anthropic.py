@@ -10,6 +10,7 @@ load_dotenv()
 
 
 class AnthropicProvider(Provider):
+
     def __init__(self, model: str):
         self.model = model
 
@@ -42,6 +43,53 @@ class AnthropicProvider(Provider):
                 }
             ],
             max_tokens=max_tokens,
+            output_config={
+                "format": {
+                    "type": "json_schema",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "enum": [
+                                    "billing",
+                                    "technical",
+                                    "account",
+                                    "delivery",
+                                    "refund",
+                                    "fraud",
+                                    "general",
+                                ],
+                            },
+                            "urgency": {
+                                "type": "string",
+                                "enum": [
+                                    "low",
+                                    "medium",
+                                    "high",
+                                ],
+                            },
+                            "summary": {
+                                "type": "string",
+                            },
+                            "suggested_reply": {
+                                "type": "string",
+                            },
+                            "needs_escalation": {
+                                "type": "boolean",
+                            },
+                        },
+                        "required": [
+                            "category",
+                            "urgency",
+                            "summary",
+                            "suggested_reply",
+                            "needs_escalation",
+                        ],
+                        "additionalProperties": False,
+                    },
+                }
+            },
         )
 
         end = time.perf_counter()

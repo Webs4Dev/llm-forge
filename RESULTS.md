@@ -23,13 +23,12 @@
 | Escalation F1 | 100% | N/A |
 | Fact Recall | 43.44% | N/A |
 | Forbidden Claim Rate | 0% | N/A |
+| Avg Summary Similarity | 92.24% | N/A |
+| P50 Summary Similarity | 94.17% | N/A |
+| P95 Summary Similarity | 99.81% | N/A |
 | Category Consistency | 98.67% | N/A |
 | Urgency Consistency | 97.33% | N/A |
 | Escalation Consistency | 100% | N/A |
-
-> Anthropic's `N/A` quality values are because the raw Markdown-fenced responses failed the current strict JSON parser.
-
----
 
 ## Optimization 1 — Anthropic JSON Fence Normalization
 
@@ -45,25 +44,53 @@
 | Escalation F1 | N/A | 87.80% | — |
 | Fact Recall | N/A | 36.56% | — |
 | Forbidden Claim Rate | N/A | 0% | — |
+| Avg Summary Similarity | N/A | 87.41% | — |
+| P50 Summary Similarity | N/A | 89.27% | — |
+| P95 Summary Similarity | N/A | 96.54% | — |
 | Category Consistency | N/A | 100% | — |
 | Urgency Consistency | N/A | 99.33% | — |
 | Escalation Consistency | N/A | 94.00% | — |
 
----
+## Optimization 2 — Native Structured Output
 
-## Optimization 2 — <name>
+### OpenAI
 
 | Metric | Before | After | Improvement |
 |---|---:|---:|---:|
-| JSON Parse Failure | — | — | — |
-| Schema Validity | — | — | — |
-| Category Accuracy | — | — | — |
-| Urgency Accuracy | — | — | — |
-| Escalation Accuracy | — | — | — |
-| Category F1 | — | — | — |
-| Urgency F1 | — | — | — |
-| Escalation F1 | — | — | — |
-| Fact Recall | — | — | — |
-| Forbidden Claim Rate | — | — | — |
-| Avg Latency | — | — | — |
-| Avg Cost/Request | — | — | — |
+| JSON Parse Failure | 0% | 0% | 0 pp |
+| Schema Validity | 100% | 100% | 0 pp |
+| Category Accuracy | 86.67% | 86.67% | 0 pp |
+| Urgency Accuracy | 82.67% | 83.33% | +0.66 pp |
+| Escalation Accuracy | 100% | 100% | 0 pp |
+| Category F1 | 81.30% | 80.48% | -0.82 pp |
+| Urgency F1 | 82.36% | 83.19% | +0.83 pp |
+| Escalation F1 | 100% | 100% | 0 pp |
+| Fact Recall | 43.44% | 43.89% | +0.45 pp |
+| Forbidden Claim Rate | 0% | 2.00% | +2 pp |
+| Avg Summary Similarity | 92.24% | 91.89% | -0.35 pp |
+| P50 Summary Similarity | 94.17% | 93.82% | -0.35 pp |
+| P95 Summary Similarity | 99.81% | 99.56% | -0.25 pp |
+| Category Consistency | 98.67% | 100% | +1.33 pp |
+| Urgency Consistency | 97.33% | 100% | +2.67 pp |
+| Escalation Consistency | 100% | 100% | 0 pp |
+
+### Anthropic
+
+| Metric | Before | After | Improvement |
+|---|---:|---:|---:|
+| JSON Parse Failure | 100% | 0% | -100 pp |
+| Schema Validity | 0% | 100% | +100 pp |
+| Category Accuracy | 83.33% | 80.67% | -2.66 pp |
+| Urgency Accuracy | 84.00% | 83.33% | -0.67 pp |
+| Escalation Accuracy | 92.00% | 97.33% | +5.33 pp |
+| Category F1 | 82.32% | 78.32% | -4.00 pp |
+| Urgency F1 | 83.76% | 83.19% | -0.57 pp |
+| Escalation F1 | 87.80% | 95.48% | +7.68 pp |
+| Fact Recall | 36.56% | 35.33% | -1.23 pp |
+| Forbidden Claim Rate | 0% | 0% | 0 pp |
+| Avg Summary Similarity | 87.41% | 87.98% | +0.57 pp |
+| P50 Summary Similarity | 89.27% | 89.76% | +0.49 pp |
+| P95 Summary Similarity | 96.54% | 96.54% | 0 pp |
+| Category Consistency | 100% | 99.33% | -0.67 pp |
+| Urgency Consistency | 99.33% | 100% | +0.67 pp |
+| Escalation Consistency | 94.00% | 97.33% | +3.33 pp |

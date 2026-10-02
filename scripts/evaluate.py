@@ -2,18 +2,25 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(
+    0,
+    str(PROJECT_ROOT / "src")
+)
 
 from src.core.schema import validate_output
 from src.evaluation.dataset import load_dataset
 from src.evaluation.suite import (
     evaluate_dataset,
     calculate_suite_summary,
-    calculate_macro_f1
+    calculate_macro_f1,
 )
 from src.evaluation.optimization.normalize import normalize_json_output
+from src.evaluation.semantic import calculate_summary_similarity
+
 
 
 DATASET_PATH = (
@@ -30,6 +37,9 @@ def load_run_outputs(run_path):
 
     Each request remains separate, including repeats.
 
+    Anthropic outputs are normalized before JSON parsing
+    so Markdown-fenced JSON can be evaluated.
+
     Returns:
         List of records.
     """
@@ -39,10 +49,11 @@ def load_run_outputs(run_path):
     with open(
         run_path,
         "r",
-        encoding="utf-8",
+        encoding="utf-8"
     ) as file:
 
         for line in file:
+
             line = line.strip()
 
             if not line:
@@ -57,10 +68,13 @@ def load_run_outputs(run_path):
             )
 
             try:
+
                 parsed_output = json.loads(
                     normalized_output
                 )
+
             except json.JSONDecodeError:
+
                 parsed_output = None
 
             outputs.append(
@@ -132,32 +146,6 @@ def calculate_schema_validity(
     return valid_count / len(run_outputs)
 
 
-def group_parsed_outputs(run_outputs):
-    """
-    Group successfully parsed outputs by case_id.
-
-    Each case can have multiple repeats.
-    """
-
-    grouped = {}
-
-    for record in run_outputs:
-
-        if not record["parse_success"]:
-            continue
-
-        case_id = record["case_id"]
-
-        if case_id not in grouped:
-            grouped[case_id] = []
-
-        grouped[case_id].append(
-            record["parsed_output"]
-        )
-
-    return grouped
-
-
 def calculate_consistency(
     run_outputs,
     field,
@@ -168,8 +156,7 @@ def calculate_consistency(
     For each case, find the most common prediction
     across its repeats.
 
-    Consistency is:
-
+    Consistency =
         matching repeats / total repeats
     """
 
@@ -205,6 +192,7 @@ def calculate_consistency(
         counts = {}
 
         for value in values:
+
             counts[value] = (
                 counts.get(value, 0) + 1
             )
@@ -227,7 +215,7 @@ def build_evaluation_inputs(
     run_outputs,
 ):
     """
-    Convert the repeated run records into the
+    Convert repeated run records into the
     format expected by the evaluation engine.
 
     Every repeat is evaluated separately.
@@ -239,6 +227,7 @@ def build_evaluation_inputs(
     }
 
     evaluation_cases = []
+
     evaluation_outputs = {}
 
     for record in run_outputs:
@@ -279,6 +268,85 @@ def build_evaluation_inputs(
     )
 
 
+def calculate_semantic_metrics(
+    cases,
+    run_outputs,
+):
+    """
+    Calculate semantic similarity between
+    each gold summary and generated summary.
+
+    Returns:
+        average_similarity,
+        p50_similarity,
+        p95_similarity
+    """
+
+    case_lookup = {
+        case["case_id"]: case
+        for case in cases
+    }
+
+    scores = []
+
+    for record in run_outputs:
+
+        if not record["parse_success"]:
+            continue
+
+        case_id = record["case_id"]
+
+        if case_id not in case_lookup:
+            continue
+
+        case = case_lookup[case_id]
+
+        reference_summary = (
+            case["reference"]["gold_summary"]
+        )
+
+        generated_summary = (
+            record["parsed_output"].get(
+                "summary",
+                "",
+            )
+        )
+
+        score = calculate_summary_similarity(
+            reference_summary,
+            generated_summary,
+        )
+
+        scores.append(score)
+
+    if not scores:
+        return 0.0, 0.0, 0.0
+
+    average_similarity = float(
+        np.mean(scores)
+    )
+
+    p50_similarity = float(
+        np.percentile(
+            scores,
+            50,
+        )
+    )
+
+    p95_similarity = float(
+        np.percentile(
+            scores,
+            95,
+        )
+    )
+
+    return (
+        average_similarity,
+        p50_similarity,
+        p95_similarity,
+    )
+
+
 def print_report(
     run_path,
     run_outputs,
@@ -286,13 +354,18 @@ def print_report(
     summary,
     category_f1,
     urgency_f1,
-    escalation_f1
+    escalation_f1,
+    semantic_average,
+    semantic_p50,
+    semantic_p95,
 ):
     """
     Print the complete evaluation report.
     """
 
-    total_requests = len(run_outputs)
+    total_requests = len(
+        run_outputs
+    )
 
     unique_cases = len(
         {
@@ -341,27 +414,38 @@ def print_report(
     )
 
     print()
+
     print("=" * 60)
+
     print("LLMForge EVALUATION")
+
     print("=" * 60)
 
     print()
-    print(f"Run: {run_path.name}")
+
+    print(
+        f"Run: {run_path.name}"
+    )
+
     print(
         f"Total requests:        "
         f"{total_requests}"
     )
+
     print(
         f"Unique cases:          "
         f"{unique_cases}"
     )
+
     print(
         f"Successfully parsed:   "
         f"{successful_parses}"
     )
 
     print()
+
     print("FORMAT / SCHEMA")
+
     print("-" * 60)
 
     print(
@@ -375,7 +459,9 @@ def print_report(
     )
 
     print()
+
     print("DETERMINISTIC QUALITY")
+
     print("-" * 60)
 
     if results:
@@ -429,7 +515,39 @@ def print_report(
         )
 
     print()
+
+    print("SEMANTIC QUALITY")
+
+    print("-" * 60)
+
+    if successful_parses > 0:
+
+        print(
+            f"Average summary similarity: "
+            f"{semantic_average:.4f}"
+        )
+
+        print(
+            f"P50 summary similarity:     "
+            f"{semantic_p50:.4f}"
+        )
+
+        print(
+            f"P95 summary similarity:     "
+            f"{semantic_p95:.4f}"
+        )
+
+    else:
+
+        print(
+            "No successfully parsed outputs "
+            "available for semantic evaluation."
+        )
+
+    print()
+
     print("REPEAT CONSISTENCY")
+
     print("-" * 60)
 
     print(
@@ -448,6 +566,7 @@ def print_report(
     )
 
     print()
+
     print("=" * 60)
 
 
@@ -463,9 +582,7 @@ def main():
 
         print()
 
-        print(
-            "Example:"
-        )
+        print("Example:")
 
         print(
             "python -m scripts.evaluate "
@@ -474,7 +591,9 @@ def main():
 
         return
 
-    run_path = PROJECT_ROOT / sys.argv[1]
+    run_path = (
+        PROJECT_ROOT / sys.argv[1]
+    )
 
     if not run_path.exists():
 
@@ -524,10 +643,20 @@ def main():
     )
 
     escalation_f1 = calculate_macro_f1(
-            evaluation_cases,
-            evaluation_outputs,
-            "needs_escalation",
+        evaluation_cases,
+        evaluation_outputs,
+        "needs_escalation",
     )
+
+    (
+        semantic_average,
+        semantic_p50,
+        semantic_p95,
+    ) = calculate_semantic_metrics(
+        cases,
+        run_outputs,
+    )
+
     print_report(
         run_path,
         run_outputs,
@@ -535,7 +664,10 @@ def main():
         summary,
         category_f1,
         urgency_f1,
-        escalation_f1
+        escalation_f1,
+        semantic_average,
+        semantic_p50,
+        semantic_p95,
     )
 
 
