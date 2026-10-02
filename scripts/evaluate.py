@@ -11,7 +11,9 @@ from src.evaluation.dataset import load_dataset
 from src.evaluation.suite import (
     evaluate_dataset,
     calculate_suite_summary,
+    calculate_macro_f1
 )
+from src.evaluation.optimization.normalize import normalize_json_output
 
 
 DATASET_PATH = (
@@ -24,16 +26,15 @@ DATASET_PATH = (
 
 def load_run_outputs(run_path):
     """
-    Load stored model outputs from a baseline JSONL file.
+    Load every request from a baseline JSONL file.
+
+    Each request remains separate, including repeats.
 
     Returns:
-        Dictionary mapping case_id -> parsed model output.
-
-    Invalid JSON outputs are stored as None so that
-    parse failures are not silently discarded.
+        List of records.
     """
 
-    outputs = {}
+    outputs = []
 
     with open(
         run_path,
@@ -49,47 +50,42 @@ def load_run_outputs(run_path):
 
             record = json.loads(line)
 
-            case_id = record["case_id"]
             raw_output = record["raw_output"]
+
+            normalized_output = normalize_json_output(
+                raw_output
+            )
 
             try:
                 parsed_output = json.loads(
-                    raw_output
+                    normalized_output
                 )
             except json.JSONDecodeError:
                 parsed_output = None
 
-            outputs[case_id] = {
-                "raw_output": raw_output,
-                "parsed_output": parsed_output,
-                "parse_success": parsed_output is not None,
-            }
+            outputs.append(
+                {
+                    "provider": record["provider"],
+                    "model": record["model"],
+                    "case_id": record["case_id"],
+                    "repeat": record["repeat"],
+                    "raw_output": raw_output,
+                    "parsed_output": parsed_output,
+                    "parse_success": (
+                        parsed_output is not None
+                    ),
+                }
+            )
 
     return outputs
 
 
-def build_valid_outputs(run_outputs):
+def calculate_parse_failure_rate(
+    run_outputs
+):
     """
-    Extract only successfully parsed outputs.
-
-    These are the outputs that can be passed to the
-    deterministic evaluator.
-    """
-
-    outputs = {}
-
-    for case_id, record in run_outputs.items():
-
-        if record["parse_success"]:
-            outputs[case_id] = record["parsed_output"]
-
-    return outputs
-
-
-def calculate_parse_failure_rate(run_outputs):
-    """
-    Calculate the percentage of outputs that failed
-    JSON parsing.
+    Calculate JSON parse failure rate
+    across all requests.
     """
 
     if not run_outputs:
@@ -97,18 +93,21 @@ def calculate_parse_failure_rate(run_outputs):
 
     failures = sum(
         1
-        for record in run_outputs.values()
+        for record in run_outputs
         if not record["parse_success"]
     )
 
     return failures / len(run_outputs)
 
 
-def calculate_schema_validity_all(run_outputs):
+def calculate_schema_validity(
+    run_outputs
+):
     """
-    Calculate schema validity across ALL outputs.
+    Calculate schema validity across
+    all requests.
 
-    Parse failures count as schema failures.
+    Parse failures count as invalid.
     """
 
     if not run_outputs:
@@ -116,7 +115,7 @@ def calculate_schema_validity_all(run_outputs):
 
     valid_count = 0
 
-    for record in run_outputs.values():
+    for record in run_outputs:
 
         if not record["parse_success"]:
             continue
@@ -133,15 +132,213 @@ def calculate_schema_validity_all(run_outputs):
     return valid_count / len(run_outputs)
 
 
+def group_parsed_outputs(run_outputs):
+    """
+    Group successfully parsed outputs by case_id.
+
+    Each case can have multiple repeats.
+    """
+
+    grouped = {}
+
+    for record in run_outputs:
+
+        if not record["parse_success"]:
+            continue
+
+        case_id = record["case_id"]
+
+        if case_id not in grouped:
+            grouped[case_id] = []
+
+        grouped[case_id].append(
+            record["parsed_output"]
+        )
+
+    return grouped
+
+
+def calculate_consistency(
+    run_outputs,
+    field,
+):
+    """
+    Calculate repeat consistency for a field.
+
+    For each case, find the most common prediction
+    across its repeats.
+
+    Consistency is:
+
+        matching repeats / total repeats
+    """
+
+    grouped = {}
+
+    for record in run_outputs:
+
+        if not record["parse_success"]:
+            continue
+
+        case_id = record["case_id"]
+
+        value = record[
+            "parsed_output"
+        ].get(field)
+
+        if case_id not in grouped:
+            grouped[case_id] = []
+
+        grouped[case_id].append(value)
+
+    if not grouped:
+        return 0.0
+
+    total = 0
+    matching = 0
+
+    for values in grouped.values():
+
+        if not values:
+            continue
+
+        counts = {}
+
+        for value in values:
+            counts[value] = (
+                counts.get(value, 0) + 1
+            )
+
+        most_common_count = max(
+            counts.values()
+        )
+
+        matching += most_common_count
+        total += len(values)
+
+    if total == 0:
+        return 0.0
+
+    return matching / total
+
+
+def build_evaluation_inputs(
+    cases,
+    run_outputs,
+):
+    """
+    Convert the repeated run records into the
+    format expected by the evaluation engine.
+
+    Every repeat is evaluated separately.
+    """
+
+    case_lookup = {
+        case["case_id"]: case
+        for case in cases
+    }
+
+    evaluation_cases = []
+    evaluation_outputs = {}
+
+    for record in run_outputs:
+
+        if not record["parse_success"]:
+            continue
+
+        case_id = record["case_id"]
+
+        if case_id not in case_lookup:
+            continue
+
+        case = case_lookup[case_id]
+
+        repeat = record["repeat"]
+
+        evaluation_id = (
+            f"{case_id}_repeat_{repeat}"
+        )
+
+        evaluation_case = dict(case)
+
+        evaluation_case["case_id"] = (
+            evaluation_id
+        )
+
+        evaluation_cases.append(
+            evaluation_case
+        )
+
+        evaluation_outputs[
+            evaluation_id
+        ] = record["parsed_output"]
+
+    return (
+        evaluation_cases,
+        evaluation_outputs,
+    )
+
+
 def print_report(
     run_path,
     run_outputs,
     results,
     summary,
+    category_f1,
+    urgency_f1,
+    escalation_f1
 ):
     """
-    Print evaluation results to the terminal.
+    Print the complete evaluation report.
     """
+
+    total_requests = len(run_outputs)
+
+    unique_cases = len(
+        {
+            record["case_id"]
+            for record in run_outputs
+        }
+    )
+
+    successful_parses = sum(
+        1
+        for record in run_outputs
+        if record["parse_success"]
+    )
+
+    parse_failure_rate = (
+        calculate_parse_failure_rate(
+            run_outputs
+        )
+    )
+
+    schema_validity = (
+        calculate_schema_validity(
+            run_outputs
+        )
+    )
+
+    category_consistency = (
+        calculate_consistency(
+            run_outputs,
+            "category",
+        )
+    )
+
+    urgency_consistency = (
+        calculate_consistency(
+            run_outputs,
+            "urgency",
+        )
+    )
+
+    escalation_consistency = (
+        calculate_consistency(
+            run_outputs,
+            "needs_escalation",
+        )
+    )
 
     print()
     print("=" * 60)
@@ -150,28 +347,22 @@ def print_report(
 
     print()
     print(f"Run: {run_path.name}")
-
     print(
-        f"Model outputs: "
-        f"{len(run_outputs)}"
+        f"Total requests:        "
+        f"{total_requests}"
     )
-
     print(
-        f"Successfully parsed: "
-        f"{len(results)}"
+        f"Unique cases:          "
+        f"{unique_cases}"
+    )
+    print(
+        f"Successfully parsed:   "
+        f"{successful_parses}"
     )
 
     print()
     print("FORMAT / SCHEMA")
     print("-" * 60)
-
-    parse_failure_rate = calculate_parse_failure_rate(
-        run_outputs
-    )
-
-    schema_validity = calculate_schema_validity_all(
-        run_outputs
-    )
 
     print(
         f"JSON parse failure rate: "
@@ -184,7 +375,7 @@ def print_report(
     )
 
     print()
-    print("DETERMINISTIC METRICS")
+    print("DETERMINISTIC QUALITY")
     print("-" * 60)
 
     if results:
@@ -205,6 +396,21 @@ def print_report(
         )
 
         print(
+            f"Category F1:             "
+            f"{category_f1:.4f}"
+        )
+
+        print(
+            f"Urgency F1:              "
+            f"{urgency_f1:.4f}"
+        )
+
+        print(
+            f"Escalation F1:           "
+            f"{escalation_f1:.4f}"
+        )
+
+        print(
             f"Fact recall:             "
             f"{summary['fact_recall']:.4f}"
         )
@@ -218,23 +424,28 @@ def print_report(
 
         print(
             "No successfully parsed outputs "
-            "available for deterministic evaluation."
+            "available for deterministic "
+            "evaluation."
         )
 
     print()
-    print("PER-CASE FORMAT RESULTS")
+    print("REPEAT CONSISTENCY")
     print("-" * 60)
 
-    for case_id, record in run_outputs.items():
+    print(
+        f"Category consistency:    "
+        f"{category_consistency:.4f}"
+    )
 
-        if record["parse_success"]:
-            status = "PARSED"
-        else:
-            status = "PARSE FAILED"
+    print(
+        f"Urgency consistency:     "
+        f"{urgency_consistency:.4f}"
+    )
 
-        print(
-            f"{case_id} | {status}"
-        )
+    print(
+        f"Escalation consistency:  "
+        f"{escalation_consistency:.4f}"
+    )
 
     print()
     print("=" * 60)
@@ -243,6 +454,7 @@ def print_report(
 def main():
 
     if len(sys.argv) != 2:
+
         print(
             "Usage: "
             "python -m scripts.evaluate "
@@ -257,7 +469,7 @@ def main():
 
         print(
             "python -m scripts.evaluate "
-            "data/runs/baseline_anthropic.jsonl"
+            "data/runs/baseline_openai.jsonl"
         )
 
         return
@@ -265,9 +477,12 @@ def main():
     run_path = PROJECT_ROOT / sys.argv[1]
 
     if not run_path.exists():
+
         print(
-            f"Run file not found: {run_path}"
+            f"Run file not found: "
+            f"{run_path}"
         )
+
         return
 
     cases = load_dataset(
@@ -278,25 +493,49 @@ def main():
         run_path
     )
 
-    valid_outputs = build_valid_outputs(
-        run_outputs
+    (
+        evaluation_cases,
+        evaluation_outputs,
+    ) = build_evaluation_inputs(
+        cases,
+        run_outputs,
     )
 
     results = evaluate_dataset(
-        cases,
-        valid_outputs
+        evaluation_cases,
+        evaluation_outputs,
     )
 
     summary = calculate_suite_summary(
         results,
-        valid_outputs,
+        evaluation_outputs,
     )
 
+    category_f1 = calculate_macro_f1(
+        evaluation_cases,
+        evaluation_outputs,
+        "category",
+    )
+
+    urgency_f1 = calculate_macro_f1(
+        evaluation_cases,
+        evaluation_outputs,
+        "urgency",
+    )
+
+    escalation_f1 = calculate_macro_f1(
+            evaluation_cases,
+            evaluation_outputs,
+            "needs_escalation",
+    )
     print_report(
         run_path,
         run_outputs,
         results,
         summary,
+        category_f1,
+        urgency_f1,
+        escalation_f1
     )
 
 
