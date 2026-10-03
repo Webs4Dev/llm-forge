@@ -6,11 +6,12 @@ from src.providers.base import GenerationResult, Provider
 class FakeProvider(Provider):
     def __init__(
         self,
-        response: str,
-        input_tokens: int = 100,
-        output_tokens: int = 50,
-        latency: float = 0.5,
+        response,
+        input_tokens,
+        output_tokens,
+        latency,
     ):
+        self.model = "fake"
         self.response = response
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens

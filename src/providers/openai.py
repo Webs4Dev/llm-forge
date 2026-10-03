@@ -4,7 +4,7 @@ import time
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from providers.base import GenerationResult, Provider
+from src.providers.base import GenerationResult, Provider
 
 load_dotenv()
 

@@ -18,7 +18,7 @@ from src.evaluation.suite import (
     calculate_suite_summary,
     calculate_macro_f1,
 )
-from src.evaluation.optimization.normalize import normalize_json_output
+from src.optimization.normalize import normalize_json_output
 from src.evaluation.semantic import calculate_summary_similarity
 
 
