@@ -31,3 +31,37 @@
 - Anthropic was approximately **6.06× more expensive** per request than OpenAI.
 - Both real providers achieved **0% JSON parse failures** and **100% schema validity**.
 - FakeProvider is used as the deterministic local baseline with zero API cost.
+
+## Optimization 1 — Exact Cache
+
+| Metric | Fake | OpenAI | Anthropic |
+|---|---:|---:|---:|
+| Requests | 300 | 300 | 300 |
+| Cache Hits | 200 | 200 | 200 |
+| Cache Misses | 100 | 100 | 100 |
+| Cache Hit Rate | 66.67% | 66.67% | 66.67% |
+| LLM Calls | 100 | 100 | 100 |
+| LLM Calls Avoided | 200 | 200 | 200 |
+| Average Latency | 0.0359s | 0.6564s | 0.6923s |
+| P50 Latency | 0.0010s | 0.0010s | 0.0009s |
+| P95 Latency | 0.1076s | 2.2906s | 2.4540s |
+| P99 Latency | 0.1079s | 3.1861s | 2.7327s |
+| Average TTFT | — | 0.6552s | 0.6911s |
+| Total Input Tokens | 10,000 | 121,755 | 157,986 |
+| Total Output Tokens | 5,000 | 9,894 | 11,895 |
+| Average Cost/Request | $0.00000000 | $0.00012075 | $0.00072487 |
+| Total Cost | $0.00000000 | $0.03622380 | $0.21746100 |
+| JSON Parse Failures | 0% | 0% | 0% |
+| Schema Failures | 0% | 0% | 0% |
+
+### Exact Cache Observations
+
+- The frozen 300-request workload produced exactly **200 cache hits and 100 misses**, matching the expected 66.67% duplicate rate.
+- Exact caching reduced OpenAI average latency from **1.8198s to 0.6564s**, a reduction of approximately **63.9%**.
+- OpenAI total cost decreased from **$0.10752860 to $0.03622380**, a reduction of approximately **66.3%**.
+- Exact caching reduced Anthropic average latency from **2.1837s to 0.6923s**, a reduction of approximately **68.3%**.
+- Anthropic total cost decreased from **$0.65127900 to $0.21746100**, a reduction of approximately **66.6%**.
+- The cache avoided **200 of 300 LLM calls**.
+- All cache experiments produced **0 JSON parse failures**.
+- The earlier OpenAI result of 169 hits / 131 misses was discarded because OpenAI and Anthropic were run concurrently against the same Redis database, while both experiments clear the cache at startup.
+- The sequential OpenAI run produced the expected **200 hits / 100 misses** and is the official result.

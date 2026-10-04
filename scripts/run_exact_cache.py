@@ -1,72 +1,61 @@
 import argparse
 import json
-import random
 import sys
 import time
 from pathlib import Path
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-
 from src.core.generate import generate
 from src.core.cost import calculate_cost, load_pricing
 from src.core.schema import validate_output
 from src.optimization.cache.redis_cache import RedisExactCache
+
 from src.providers.fake import FakeProvider
 from src.providers.openai import OpenAIProvider
 from src.providers.anthropic import AnthropicProvider
 
 
-DATASET_PATH = (
+WORKLOAD_PATH = (
     PROJECT_ROOT
     / "data"
-    / "datasets"
-    / "tickets-seed.jsonl"
+    / "workloads"
+    / "workload-300.jsonl"
 )
 
 PRICING_PATH = PROJECT_ROOT / "data" / "pricing.yaml"
-
 OUTPUT_DIR = PROJECT_ROOT / "data" / "runs"
 
-TOTAL_REQUESTS = 150
-SEED = 42
+TOTAL_REQUESTS = 300
 
 
-def load_tickets():
-    tickets = []
+def load_workload():
+    requests = []
 
     with open(
-        DATASET_PATH,
+        WORKLOAD_PATH,
         "r",
         encoding="utf-8",
     ) as file:
 
         for line in file:
             if line.strip():
-                tickets.append(
-                    json.loads(line)
-                )
+                requests.append(json.loads(line))
 
-    return tickets
+    if len(requests) != TOTAL_REQUESTS:
+        raise ValueError(
+            f"Expected {TOTAL_REQUESTS} requests, "
+            f"found {len(requests)}"
+        )
 
-
-def is_valid_json(text):
-    try:
-        json.loads(text)
-        return True
-
-    except json.JSONDecodeError:
-        return False
+    return requests
 
 
 def create_provider(provider_name):
-
     if provider_name == "fake":
-
         return FakeProvider(
             response=json.dumps({
                 "category": "general",
@@ -83,13 +72,11 @@ def create_provider(provider_name):
         )
 
     if provider_name == "openai":
-
         return OpenAIProvider(
             model="gpt-5.6-luna"
         )
 
     if provider_name == "anthropic":
-
         return AnthropicProvider(
             model="claude-haiku-4-5"
         )
@@ -100,7 +87,6 @@ def create_provider(provider_name):
 
 
 def get_model_name(provider_name):
-
     if provider_name == "openai":
         return "gpt-5.6-luna"
 
@@ -111,10 +97,7 @@ def get_model_name(provider_name):
 
 
 def get_pricing(provider_name):
-
-    pricing = load_pricing(
-        PRICING_PATH
-    )
+    pricing = load_pricing(PRICING_PATH)
 
     model_name = get_model_name(
         provider_name
@@ -128,100 +111,47 @@ def get_pricing(provider_name):
     )
 
 
-def build_workload(tickets, duplicate_rate):
-    rng = random.Random(SEED)
+def is_valid_json(text):
+    try:
+        json.loads(text)
+        return True
 
-    if not tickets:
-        raise ValueError("No tickets available.")
-
-    # We need at least one occurrence of every ticket
-    # so that we have a pool of previously seen tickets.
-    unique_workload = tickets.copy()
-
-    remaining_requests = TOTAL_REQUESTS - len(
-        unique_workload
-    )
-
-    duplicate_count = round(
-        remaining_requests * duplicate_rate
-    )
-
-    new_count = (
-        remaining_requests - duplicate_count
-    )
-
-    workload = []
-
-    # First occurrence of every ticket.
-    workload.extend(
-        (ticket, False)
-        for ticket in unique_workload
-    )
-
-    # Add intentionally duplicated requests.
-    for _ in range(duplicate_count):
-        ticket = rng.choice(
-            unique_workload
-        )
-
-        workload.append(
-            (ticket, True)
-        )
-
-    # Add the remaining requests.
-    # These are also selected from the 30-ticket
-    # dataset, but they are marked False because
-    # they are not intentionally generated as duplicates.
-    for _ in range(new_count):
-        ticket = rng.choice(
-            unique_workload
-        )
-
-        workload.append(
-            (ticket, False)
-        )
-
-    rng.shuffle(workload)
-
-    return workload
+    except json.JSONDecodeError:
+        return False
 
 
-def calculate_duplicate_rate(
-    duplicate_flags,
-):
-    if not duplicate_flags:
+def percentile(values, percentile_value):
+    values = sorted(values)
+
+    if not values:
         return 0.0
 
-    duplicates = sum(
-        duplicate_flags
+    index = (
+        (len(values) - 1)
+        * percentile_value
+        / 100
     )
 
-    return duplicates / len(
-        duplicate_flags
-    )
+    lower = int(index)
+    upper = lower + 1
 
+    if upper >= len(values):
+        return values[lower]
 
-def run_cache_experiment(
-    provider_name,
-    duplicate_rate,
-    limit=None,
-):
+    weight = index - lower
 
-    tickets = load_tickets()
-
-    if limit is not None:
-
-        if limit <= 0:
-            raise ValueError(
-                "--limit must be greater than 0."
-            )
-
-        tickets = tickets[:limit]
-
-    if not tickets:
-        raise ValueError(
-            "No tickets available."
+    return (
+        values[lower]
+        + (
+            values[upper]
+            - values[lower]
         )
+        * weight
+    )
+
+
+def run_cache_experiment(provider_name):
+    workload = load_workload()
 
     provider = create_provider(
         provider_name
@@ -240,45 +170,12 @@ def run_cache_experiment(
         ttl=3600,
     )
 
-    # Start every experiment with an empty cache.
+    # Start with an empty cache.
     cache.clear()
-
-    workload = build_workload(
-        tickets=tickets,
-        duplicate_rate=duplicate_rate,
-    )
-
-    duplicate_flags = [
-        item[1]
-        for item in workload
-    ]
-
-    actual_duplicate_rate = (
-        calculate_duplicate_rate(
-            duplicate_flags
-        )
-    )
-
-    print(
-        f"Requested duplicate rate: "
-        f"{duplicate_rate:.0%}"
-    )
-
-    print(
-        f"Actual duplicate rate:    "
-        f"{actual_duplicate_rate:.2%}"
-    )
-
-    print()
-
-    duplicate_label = int(
-        duplicate_rate * 100
-    )
 
     output_path = (
         OUTPUT_DIR
-        / f"cache_{provider_name}_"
-        f"{duplicate_label}pct.jsonl"
+        / f"exact_cache_{provider_name}.jsonl"
     )
 
     OUTPUT_DIR.mkdir(
@@ -286,9 +183,21 @@ def run_cache_experiment(
         exist_ok=True,
     )
 
-    total_requests = 0
+    latencies = []
+    ttfts = []
+    costs = []
+
+    total_input_tokens = 0
+    total_output_tokens = 0
+
     total_cost = 0.0
     llm_calls = 0
+
+    parse_failures = 0
+    schema_failures = 0
+
+    cache_hits = 0
+    cache_misses = 0
 
     with open(
         output_path,
@@ -296,21 +205,17 @@ def run_cache_experiment(
         encoding="utf-8",
     ) as output_file:
 
-        for (
-            request_index,
-            item,
-        ) in enumerate(
-            workload,
-            start=1,
-        ):
+        for request in workload:
 
-            ticket, intentional_duplicate = item
+            request_index = request[
+                "request_index"
+            ]
 
-            case_id = ticket["case_id"]
+            case_id = request[
+                "case_id"
+            ]
 
-            ticket_text = ticket[
-                "input"
-            ][
+            ticket_text = request[
                 "ticket_text"
             ]
 
@@ -327,10 +232,9 @@ def run_cache_experiment(
                 cache=cache,
             )
 
-            end = time.perf_counter()
-
             total_latency = (
-                end - start
+                time.perf_counter()
+                - start
             )
 
             cache_hit = (
@@ -341,7 +245,11 @@ def run_cache_experiment(
                 cache.misses > misses_before
             )
 
+            if cache_hit:
+                cache_hits += 1
+
             if cache_miss:
+                cache_misses += 1
                 llm_calls += 1
 
             cost = calculate_cost(
@@ -353,6 +261,24 @@ def run_cache_experiment(
 
             total_cost += cost
 
+            total_input_tokens += (
+                result.input_tokens
+            )
+
+            total_output_tokens += (
+                result.output_tokens
+            )
+
+            latencies.append(
+                total_latency
+            )
+
+            ttfts.append(
+                result.ttft
+            )
+
+            costs.append(cost)
+
             parse_success = is_valid_json(
                 result.text
             )
@@ -363,57 +289,37 @@ def run_cache_experiment(
                 )
             )
 
+            if not parse_success:
+                parse_failures += 1
+
+            if not schema_valid:
+                schema_failures += 1
+
             record = {
                 "provider": provider_name,
                 "model": model_name,
-
-                "requested_duplicate_rate": (
-                    duplicate_rate
-                ),
-
-                "actual_duplicate_rate": (
-                    actual_duplicate_rate
-                ),
-
-                "request_index": (
-                    request_index
-                ),
-
+                "request_index": request_index,
                 "case_id": case_id,
-
-                "intentional_duplicate": (
-                    intentional_duplicate
-                ),
-
                 "cache_hit": cache_hit,
                 "cache_miss": cache_miss,
-
                 "input_tokens": (
                     result.input_tokens
                 ),
-
                 "output_tokens": (
                     result.output_tokens
                 ),
-
                 "ttft": result.ttft,
-
                 "total_latency": (
                     total_latency
                 ),
-
                 "cost": cost,
-
                 "raw_output": result.text,
-
                 "parse_success": (
                     parse_success
                 ),
-
                 "schema_valid": (
                     schema_valid
                 ),
-
                 "schema_error": (
                     schema_error
                 ),
@@ -424,88 +330,137 @@ def run_cache_experiment(
                 + "\n"
             )
 
-            total_requests += 1
+            output_file.flush()
 
             print(
                 f"{request_index:03d} | "
                 f"{case_id} | "
-                f"{'DUP' if intentional_duplicate else 'NEW'} | "
                 f"{'HIT' if cache_hit else 'MISS'} | "
                 f"{total_latency:.4f}s"
             )
 
+    total_requests = len(workload)
+
     hit_rate = (
-        cache.hits / total_requests
+        cache_hits / total_requests
         if total_requests > 0
         else 0.0
     )
 
+    miss_rate = (
+        cache_misses / total_requests
+        if total_requests > 0
+        else 0.0
+    )
+
+    average_latency = (
+        sum(latencies)
+        / len(latencies)
+    )
+
+    average_ttft = (
+        sum(ttfts)
+        / len(ttfts)
+    )
+
+    average_cost = (
+        total_cost
+        / total_requests
+    )
+
     print()
+    print("=" * 60)
+    print("LLMForge EXACT CACHE EXPERIMENT")
+    print("=" * 60)
 
+    print(f"Provider:             {provider_name}")
+    print(f"Model:                {model_name}")
+    print(f"Total requests:       {total_requests}")
+
+    print()
+    print("CACHE")
+    print(f"Cache hits:           {cache_hits}")
+    print(f"Cache misses:         {cache_misses}")
+    print(f"Cache hit rate:       {hit_rate:.2%}")
+    print(f"Cache miss rate:      {miss_rate:.2%}")
+    print(f"LLM calls:            {llm_calls}")
     print(
-        "Cache experiment complete."
+        f"LLM calls avoided:    "
+        f"{cache_hits}"
     )
 
+    print()
+    print("LATENCY")
     print(
-        f"Provider: {provider_name}"
+        f"Average latency:      "
+        f"{average_latency:.4f} s"
+    )
+    print(
+        f"P50 latency:          "
+        f"{percentile(latencies, 50):.4f} s"
+    )
+    print(
+        f"P95 latency:          "
+        f"{percentile(latencies, 95):.4f} s"
+    )
+    print(
+        f"P99 latency:          "
+        f"{percentile(latencies, 99):.4f} s"
     )
 
+    print()
+    print("TTFT")
     print(
-        f"Model: {model_name}"
+        f"Average TTFT:         "
+        f"{average_ttft:.4f} s"
     )
 
+    print()
+    print("TOKENS")
     print(
-        f"Requested duplicate rate: "
-        f"{duplicate_rate:.0%}"
+        f"Total input tokens:   "
+        f"{total_input_tokens}"
+    )
+    print(
+        f"Total output tokens:  "
+        f"{total_output_tokens}"
     )
 
+    print()
+    print("COST")
     print(
-        f"Actual duplicate rate: "
-        f"{actual_duplicate_rate:.2%}"
+        f"Average cost/request: "
+        f"${average_cost:.8f}"
     )
-
     print(
-        f"Total requests: "
-        f"{total_requests}"
-    )
-
-    print(
-        f"LLM calls: "
-        f"{llm_calls}"
-    )
-
-    print(
-        f"Cache hits: "
-        f"{cache.hits}"
-    )
-
-    print(
-        f"Cache misses: "
-        f"{cache.misses}"
-    )
-
-    print(
-        f"Cache hit rate: "
-        f"{hit_rate:.2%}"
-    )
-
-    print(
-        f"Total cost: "
+        f"Total cost:           "
         f"${total_cost:.8f}"
     )
 
+    print()
+    print("OUTPUT VALIDITY")
     print(
-        f"Output: "
-        f"{output_path}"
+        f"Parse failures:       "
+        f"{parse_failures}"
     )
+    print(
+        f"Schema failures:      "
+        f"{schema_failures}"
+    )
+
+    print()
+    print(
+        f"Output: {output_path}"
+    )
+
+    print("=" * 60)
 
 
 def main():
-
     parser = argparse.ArgumentParser(
         description=(
             "Run the LLMForge Redis "
-            "cache experiment."
+            "exact-cache experiment."
         )
     )
 
@@ -519,37 +474,10 @@ def main():
         required=True,
     )
 
-    parser.add_argument(
-        "--duplicate-rate",
-        type=float,
-        choices=[
-            0.0,
-            0.3,
-            0.7,
-        ],
-        required=True,
-        help=(
-            "Requested duplicate "
-            "workload rate."
-        ),
-    )
-
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help=(
-            "Limit the number of "
-            "seed tickets used."
-        ),
-    )
-
     args = parser.parse_args()
 
     run_cache_experiment(
-        provider_name=args.provider,
-        duplicate_rate=args.duplicate_rate,
-        limit=args.limit,
+        provider_name=args.provider
     )
 
 
