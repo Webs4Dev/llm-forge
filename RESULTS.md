@@ -209,3 +209,110 @@ The next optimization is **Prompt Optimization**. The goal is to determine wheth
 After prompt optimization, model routing can be evaluated again using the optimized configuration.
 
 **Selected model for routing experiment: TBD**
+
+## Optimization 4 — Prompt Optimization
+
+The prompt optimization experiment evaluated a compressed version of the original policy and prompt.
+
+The original V1 prompt was already evaluated during the baseline experiment, so V1 was not rerun. The existing baseline results are used as the control group.
+
+The optimized V2 prompt reduced the static instruction size from 1,126 tokens to 601 tokens:
+
+- Policy: 810 → 492 tokens (**39.26% reduction**)
+- Prompt: 316 → 109 tokens (**65.51% reduction**)
+- Total static instructions: 1,126 → 601 tokens (**46.63% reduction**)
+- Estimated savings over 300 requests: **157,500 tokens**
+
+The same frozen 300-request workload was then executed using V2 with caching disabled.
+
+### OpenAI — GPT-5.6 Luna
+
+| Metric | V1 Baseline | V2 | Change |
+|---|---:|---:|---:|
+| Requests | 300 | 300 | — |
+| Errors | 0 | 0 | — |
+| Average Latency | 1.8198s | 2.4410s | +34.1% |
+| P50 Latency | 1.7255s | 2.2986s | +33.2% |
+| P95 Latency | 2.5003s | 3.2986s | +31.9% |
+| P99 Latency | 2.9376s | 6.2628s | +113.2% |
+| Average TTFT | 1.8194s | 2.4410s | +34.2% |
+| Input Tokens | 365,293 | 210,193 | **−42.46%** |
+| Output Tokens | 28,725 | 33,720 | +17.39% |
+| Average Cost/Request | $0.00035843 | $0.00027501 | **−23.28%** |
+| Total Cost | $0.10752860 | $0.08250260 | **−23.27%** |
+
+### Anthropic — Claude Haiku 4.5
+
+| Metric | V1 Baseline | V2 | Change |
+|---|---:|---:|---:|
+| Requests | 300 | 300 | — |
+| Errors | 0 | 0 | — |
+| Average Latency | 2.1837s | 2.7975s | +28.1% |
+| P50 Latency | 2.0900s | 2.7562s | +31.9% |
+| P95 Latency | 2.9269s | 3.1757s | +8.5% |
+| P99 Latency | 3.5621s | 3.3878s | **−4.9%** |
+| Average TTFT | 2.1833s | 2.7975s | +28.1% |
+| Input Tokens | 473,989 | 298,489 | **−37.03%** |
+| Output Tokens | 35,458 | 32,360 | **−8.74%** |
+| Average Cost/Request | $0.00217093 | $0.00153430 | **−29.33%** |
+| Total Cost | $0.65127900 | $0.46028900 | **−29.33%** |
+
+> V2 Anthropic cost is calculated using the project's pricing configuration rather than the incorrect hardcoded pricing used by the initial experiment script. The generation run itself was not repeated because the pricing calculation does not affect the generated outputs.
+
+### Quality Evaluation — OpenAI
+
+The V2 outputs were evaluated against the full 100-case golden dataset.
+
+| Metric | V1 | V2 |
+|---|---:|---:|
+| Schema Validity | 100% | 100% |
+| Category Accuracy | 90.00% | **92.00%** |
+| Category Macro-F1 | 87.24% | **90.54%** |
+| Urgency Accuracy | 82.00% | 80.00% |
+| Urgency Macro-F1 | 80.85% | 79.17% |
+| Escalation Accuracy | 97.00% | 97.00% |
+| Escalation Macro-F1 | 94.56% | 94.56% |
+| Fact Recall | 41.87% | **42.86%** |
+| Forbidden-Claim Rate | 1.00% | **0%** |
+
+### Quality Evaluation — Anthropic V2
+
+| Metric | V2 |
+|---|---:|
+| Schema Validity | 100% |
+| Category Accuracy | 88.00% |
+| Category Macro-F1 | 86.64% |
+| Urgency Accuracy | 82.00% |
+| Urgency Macro-F1 | 81.33% |
+| Escalation Accuracy | 85.00% |
+| Escalation Macro-F1 | 78.49% |
+| Fact Recall | 36.95% |
+| Forbidden-Claim Rate | 0% |
+
+### Prompt Optimization Observations
+
+- V2 reduced estimated static instruction tokens by **46.63%**.
+- OpenAI actual input tokens decreased by **42.46%**.
+- Anthropic actual input tokens decreased by **37.03%**.
+- OpenAI total cost decreased by approximately **23.27%**.
+- Anthropic total cost decreased by approximately **29.33%**.
+- Output tokens also decreased for Anthropic by approximately **8.74%**.
+- Despite the reduction in input tokens, average latency increased for both providers.
+- OpenAI P99 latency increased substantially, while Anthropic P99 latency improved slightly.
+- For OpenAI, category accuracy and category macro-F1 improved, while urgency performance decreased slightly.
+- OpenAI fact recall improved and forbidden-claim rate decreased from 1% to 0%.
+- Both V2 runs maintained 100% schema validity.
+
+### Decision
+
+Prompt optimization successfully reduced token usage and cost for both providers, but it did **not** produce a latency improvement.
+
+The optimized V2 prompt is therefore preferable when the primary objective is **reducing token usage and LLM cost**, while the latency trade-off must be considered.
+
+For OpenAI, V2 also improved category classification and factual coverage while maintaining schema reliability.
+
+For Anthropic, V2 reduced token usage and cost, but the complete V1-versus-V2 quality comparison should be interpreted separately from the OpenAI quality comparison.
+
+**Selected prompt: V2 for cost-efficiency experiments**
+
+The next optimization can investigate **LLM reliability, output guardrails, and structured-output failure handling**, while keeping the optimized prompt as the current configuration.
