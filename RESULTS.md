@@ -129,6 +129,83 @@ For the current LLMForge workload, **concurrency = 5** is selected as the balanc
 Concurrency 10 provides the highest throughput, but it introduces worse tail latency for OpenAI, particularly at P99. Concurrency 5 provides a substantial throughput improvement while maintaining better latency behavior.
 
 Therefore:
-
 ```text
 Selected concurrency = 5
+```
+
+## Optimization 3 — Model Comparison
+
+Model comparison was performed using the same frozen 300-request workload, policy, prompt, temperature, and maximum token configuration.
+
+The experiment compared:
+
+- `gpt-5.6-luna`
+- `gpt-6-luna`
+
+Each model processed all 300 requests independently, and the raw outputs were saved for offline evaluation.
+
+### Performance and Cost
+
+| Metric | GPT-5.6 Luna | GPT-6 Luna |
+|---|---:|---:|
+| Requests | 300 | 300 |
+| Errors | 0 | 0 |
+| Average Latency | 2.3335s | 3.3485s |
+| P50 Latency | 2.0024s | 3.0684s |
+| P95 Latency | 3.4796s | 5.0854s |
+| P99 Latency | 9.0354s | 8.2999s |
+| Average TTFT | 2.3335s | 3.3485s |
+| Total Input Tokens | 365,293 | 365,293 |
+| Total Output Tokens | 29,046 | 58,233 |
+| Average Cost/Request | $0.00035971 | $0.00021882 |
+| Total Cost | $0.10791380 | $0.06564580 |
+
+### Quality Evaluation
+
+The saved outputs were evaluated against the full **100-case golden dataset**.
+
+GPT-5.6 Luna successfully produced parseable outputs for all 100 cases. GPT-6 Luna had one empty output for case `T043`, resulting in 99 successfully parsed outputs.
+
+| Metric | GPT-5.6 Luna | GPT-6 Luna |
+|---|---:|---:|
+| Cases | 100 | 100 |
+| Successfully Parsed | 100 | 99 |
+| Schema Validity | 100% | 99% |
+| Category Accuracy | 90.00% | 90.91% |
+| Category Macro-F1 | 87.24% | 89.70% |
+| Urgency Accuracy | 82.00% | 80.81% |
+| Urgency Macro-F1 | 80.85% | 79.51% |
+| Escalation Accuracy | 97.00% | 96.97% |
+| Escalation Macro-F1 | 94.56% | 94.26% |
+| Fact Recall | 41.87% | 42.29% |
+| Forbidden-Claim Rate | 1.00% | 0% |
+
+Classification metrics are calculated over successfully parsed outputs.
+
+### Model Comparison Observations
+
+- Both models completed all 300 generation requests without provider-level errors.
+- GPT-6 Luna reduced total cost from `$0.10791380` to `$0.06564580`, approximately a **39% reduction**.
+- GPT-6 Luna was approximately **43.5% slower** in average latency.
+- GPT-6 Luna generated approximately twice as many output tokens.
+- GPT-6 Luna achieved higher category accuracy and category macro-F1.
+- GPT-5.6 Luna achieved better urgency accuracy and urgency macro-F1.
+- Escalation performance was effectively tied, with GPT-5.6 Luna slightly higher.
+- GPT-6 Luna achieved slightly higher fact recall.
+- GPT-6 Luna had a **0% forbidden-claim rate**, compared with 1.00% for GPT-5.6 Luna.
+- GPT-5.6 Luna had perfect parsing/schema validity, while GPT-6 Luna had one empty output.
+- The results demonstrate a clear trade-off between latency, cost, classification quality, factual coverage, and output reliability.
+
+### Decision
+
+GPT-6 Luna is the stronger **cost-efficient candidate** because it is approximately 39% cheaper while achieving slightly better category performance, slightly better fact recall, and zero forbidden-claim violations in the 100-case evaluation.
+
+However, GPT-5.6 Luna remains preferable for latency-sensitive workloads because it is substantially faster and had perfect parsing with stronger urgency performance.
+
+Therefore, **model routing will not be implemented yet**.
+
+The next optimization is **Prompt Optimization**. The goal is to determine whether the prompt can be reduced while preserving or improving quality and reducing input-token usage.
+
+After prompt optimization, model routing can be evaluated again using the optimized configuration.
+
+**Selected model for routing experiment: TBD**
