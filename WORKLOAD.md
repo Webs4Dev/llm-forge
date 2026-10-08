@@ -2,27 +2,47 @@
 
 ## Purpose
 
-LLMForge uses one fixed workload throughout the project so that system changes can be measured fairly.
+LLMForge uses one fixed workload so system changes can be measured fairly and reproducibly.
 
-The workload is a Support Ticket Assistant. The assistant receives a customer support ticket and returns a structured response containing a category, urgency, concise summary, suggested reply, and escalation decision.
+The workload is a **Support Ticket Assistant**. It receives a customer support ticket and returns:
 
-The workload is intentionally controlled so that later experiments can isolate the effects of caching, latency optimization, cost optimization, routing, reliability, guardrails, and other LLM engineering changes.
+- category
+- urgency
+- summary
+- suggested reply
+- escalation decision
+
+The workload is designed for controlled experiments involving caching, concurrency, model selection, prompt optimization, latency, cost, and reliability.
+
+---
 
 ## Input
 
 Each request contains one customer support ticket as plain text.
 
-The request is evaluated together with the fixed policy:
+The fixed policy is:
 
-`data/policy/policy-v1.txt`
+```text
+data/policy/policy-v1.txt
+```
 
-The initial seed dataset is:
+The evaluation dataset is:
 
-`data/datasets/tickets-seed.jsonl`
+```text
+data/datasets/tickets-seed.jsonl
+```
+
+The frozen experiment workload is:
+
+```text
+data/workloads/workload-300.jsonl
+```
+
+---
 
 ## Output Contract
 
-The assistant should return JSON with exactly these logical fields:
+The assistant returns JSON with exactly these logical fields:
 
 ```json
 {
@@ -34,147 +54,477 @@ The assistant should return JSON with exactly these logical fields:
 }
 ```
 
-### Allowed category values
+### Categories
 
-- `billing`
-- `technical`
-- `account`
-- `delivery`
-- `refund`
-- `fraud`
-- `general`
+```text
+billing
+technical
+account
+delivery
+refund
+fraud
+general
+```
 
-### Allowed urgency values
+### Urgency
 
-- `low`
-- `medium`
-- `high`
+```text
+low
+medium
+high
+```
 
-### `needs_escalation`
+### Escalation
 
-Must be a boolean:
+`needs_escalation` must be either:
 
-- `true`
-- `false`
+```text
+true
+false
+```
 
-## Fixed Policy
+The output contract is fixed for the current workload.
 
-The baseline workload uses:
+---
 
-`data/policy/policy-v1.txt`
+## Policy
 
-The policy is fixed during baseline measurement.
+The baseline uses:
 
-A different policy version must be treated as an explicit experimental configuration change.
+```text
+data/policy/policy-v1.txt
+```
+
+The policy remains fixed during baseline measurements.
+
+Changing the policy or prompt is an explicit experimental configuration change.
+
+---
 
 ## Dataset
 
-The initial workload contains 30 hand-written seed tickets.
+The evaluation dataset contains **100 stable support-ticket cases**.
 
-Dataset file:
-
-`data/datasets/tickets-seed.jsonl`
+```text
+data/datasets/tickets-seed.jsonl
+```
 
 Each case has a stable `case_id`.
 
-The dataset also contains reference information that will later support offline evaluation, including expected category, urgency, escalation, gold summary, important facts, forbidden claims, source facts, and safety information.
+The dataset contains reference information used for offline evaluation, including:
 
-## Dataset Splits
+- expected category
+- expected urgency
+- expected escalation
+- gold summary
+- important facts
+- forbidden claims
+- source facts
+- safety information
 
-The initial seed dataset contains development and test cases.
+---
 
-The `case_id` is the primary identifier used to match repeated observations of the same workload case.
+## Frozen Workload
 
-Later evaluation datasets may be expanded, but changes to the dataset must be versioned and recorded.
+The official experiment workload is:
+
+```text
+data/workloads/workload-300.jsonl
+```
+
+It contains:
+
+```text
+300 total requests
+100 unique tickets
+200 duplicate requests
+66.67% duplicate rate
+```
+
+Each record contains:
+
+```text
+request_index
+case_id
+ticket_text
+```
+
+The `request_index` identifies the request.
+
+The `case_id` identifies the underlying ticket.
+
+The workload sequence and content are frozen for controlled comparisons.
+
+---
+
+## Why Duplicates Exist
+
+The duplicate requests are intentional.
+
+They allow the project to measure the effect of exact caching under a realistic repeated-request workload.
+
+The workload can therefore be used to measure:
+
+- cache hit rate
+- avoided LLM calls
+- latency reduction
+- cost reduction
+- cache lookup overhead
+
+The duplicate distribution must not be changed during controlled cache experiments.
+
+---
+
+## Dataset vs Workload
+
+The dataset contains the unique evaluation cases.
+
+The workload defines the exact request sequence used during experiments.
+
+```text
+tickets-seed.jsonl
+       │
+       │ 100 unique cases
+       ↓
+workload-300.jsonl
+       │
+       ├── 100 unique requests
+       └── 200 duplicate requests
+```
+
+This keeps evaluation data and serving workload logically separate.
+
+---
 
 ## Workload Rules
 
-1. Use the same underlying tickets when comparing system configurations.
-2. Do not replace the workload with randomly generated tickets during baseline experiments.
-3. Do not introduce RAG.
-4. Do not introduce AI agents or multi-agent systems.
-5. Do not introduce vector databases.
-6. Do not use tool-calling agents.
-7. The policy is context supplied directly to the model; it is not retrieved dynamically.
-8. Changes to prompts, models, policies, generation parameters, caching, routing, reliability, or guardrails must be represented as configuration changes.
-9. Evaluation is performed offline and is not part of the serving latency path.
-10. The workload should remain stable while measuring the effect of an optimization.
+1. Use the frozen workload for controlled comparisons.
+2. Do not replace it with randomly generated tickets.
+3. Do not modify ticket content during an experiment.
+4. Do not change the request sequence between configurations.
+5. Do not introduce RAG.
+6. Do not introduce AI agents or multi-agent systems.
+7. Do not introduce vector databases.
+8. Do not use tool-calling agents.
+9. The policy is supplied directly to the model.
+10. Evaluation is performed offline.
+11. Evaluation is not part of serving latency.
+12. Output-affecting configuration changes must be explicitly recorded.
 
-## Baseline Generation Configuration
+---
 
-The first baseline will use:
+## Baseline Configuration
 
-- Temperature: `0`
-- Fixed `max_tokens`
-- One ticket per generation request
-- Fixed policy
-- Fixed prompt version
-- No caching
-- No routing
-- No retries
-- No guardrail layer
-- No model fallback
+The baseline uses:
 
-The baseline exists to establish the initial quality, latency, token usage, cost, and parsing behavior before optimization.
+```text
+Temperature:       0
+Fixed max_tokens
+One ticket per request
+Fixed policy
+Fixed prompt version
+No caching
+No routing
+No retries
+No model fallback
+```
+
+The baseline establishes initial:
+
+- quality
+- latency
+- token usage
+- cost
+- parsing behavior
+
+The same workload can also be executed using `FakeProvider` for controlled infrastructure testing.
+
+---
 
 ## Measurements
 
-For each generation request, the baseline should eventually record:
+Generation runs record:
 
-- Input token count
-- Output token count
-- Time to first token (TTFT)
-- Total latency
-- Request cost
-- Raw model output
-- JSON parse success/failure
+- request index
+- case ID
+- provider
+- model
+- input tokens
+- output tokens
+- TTFT
+- total latency
+- request cost
+- raw output
+- parse status
+- errors
 
-The initial summary should report:
+Cache experiments additionally record:
 
-- p50 latency
-- p95 latency
-- p99 latency
-- TTFT statistics
-- cost per request
-- parse failure rate
+- cache hit/miss
+- hit rate
+- LLM calls avoided
 
-## Repetition
+### Summary Metrics
 
-The first baseline experiment will run the 30 seed tickets five times sequentially:
+```text
+Average latency
+P50 latency
+P95 latency
+P99 latency
+TTFT
+Input tokens
+Output tokens
+Cost per request
+Total cost
+Parse/schema failures
+Errors
+```
 
-`30 tickets × 5 repeats = 150 requests`
+The measured results are documented in:
 
-The same workload will also be runnable with the controlled `FakeProvider`.
+```text
+RESULTS.md
+```
 
-## Frozen-vs-Experimental Components
+---
 
-### Frozen for baseline comparisons
+## Reproducibility
 
-- Seed ticket content
-- Case IDs
-- Policy version
-- Dataset version
-- Output contract
+Controlled experiments should keep the following constant unless they are the variable being tested:
 
-### Allowed to change in later experiments
+```text
+Workload
+Policy version
+Dataset version
+Prompt version
+Output contract
+Request sequence
+```
 
-- Model
-- Prompt version
-- Generation parameters
-- Exact cache
-- Semantic cache
-- Routing
-- Reliability configuration
-- Guardrails
-- Parallelization
-- Other explicitly defined system optimizations
+Every intentional configuration change should be identified in the experiment.
 
-Every intentional change should be represented by a versioned experiment configuration.
+---
 
-## Core Experimental Principle
+## Frozen Components
+
+For standard comparisons, keep these frozen:
+
+- workload file
+- ticket content
+- request sequence
+- case IDs
+- policy version
+- dataset version
+- output contract
+
+---
+
+## Experimental Components
+
+Experiments may change:
+
+- provider
+- model
+- prompt version
+- generation parameters
+- exact cache
+- concurrency
+- routing
+- reliability configuration
+- other explicitly defined optimizations
+
+Only change components relevant to the experiment.
+
+---
+
+## Exact Cache Experiment
+
+The frozen workload contains:
+
+```text
+300 requests
+100 unique requests
+200 repeated requests
+```
+
+With a correctly functioning exact cache and no errors, the expected behavior is:
+
+```text
+100 LLM calls
+200 cache hits
+```
+
+The experiment compares:
+
+```text
+Baseline
+    ↓
+Exact Cache
+```
+
+using the same workload.
+
+Primary measurements:
+
+- hit rate
+- avoided LLM calls
+- latency
+- cost
+- lookup overhead
+
+---
+
+## Concurrency Experiment
+
+Concurrency experiments use the same 300-request workload.
+
+Tested levels:
+
+```text
+1
+2
+5
+10
+```
+
+Measurements include:
+
+- total runtime
+- throughput
+- average latency
+- P50
+- P95
+- P99
+- errors
+
+The goal is to identify a useful operating point rather than simply maximizing concurrency.
+
+---
+
+## Model Comparison
+
+Model comparisons use the same frozen workload.
+
+Models are compared using:
+
+- latency
+- token usage
+- cost
+- schema validity
+- output quality
+- evaluation metrics
+
+The workload should not be regenerated between model comparisons.
+
+---
+
+## Prompt Optimization
+
+Prompt optimization keeps the workload fixed while changing prompt-related configuration such as:
+
+```text
+system policy
+user prompt
+prompt version
+output instructions
+```
+
+The objective is to reduce unnecessary token usage and cost while preserving acceptable quality and latency.
+
+---
+
+## Semantic Cache Experiment
+
+Semantic caching is treated as a separate learning experiment.
+
+A dedicated evaluation dataset is used to study:
+
+- embeddings
+- cosine similarity
+- thresholds
+- precision
+- recall
+- false positives
+- false negatives
+
+It does not modify the frozen 300-request workload.
+
+---
+
+## Evaluation
+
+Evaluation is performed offline after generation.
+
+It is not part of serving latency.
+
+Evaluation can include:
+
+```text
+Schema validity
+Category accuracy
+Category macro-F1
+Urgency accuracy
+Urgency macro-F1
+Escalation accuracy
+Escalation macro-F1
+Fact recall
+Forbidden-claim detection
+Semantic quality
+```
+
+The same evaluation methodology should be used when comparing configurations.
+
+---
+
+## Versioning
+
+Important versions include:
+
+```text
+Dataset version
+Workload version
+Policy version
+Prompt version
+Output schema version
+Experiment configuration
+```
+
+Output-affecting changes must be explicitly recorded.
+
+This is especially important for caching because different output configurations must not incorrectly share cache entries.
+
+---
+
+## Core Principle
 
 LLMForge follows:
 
-**BASELINE → MEASURE → OPTIMIZE → MEASURE AGAIN → COMPARE → UNDERSTAND TRADE-OFFS**
+```text
+BASELINE
+   ↓
+MEASURE
+   ↓
+OPTIMIZE
+   ↓
+MEASURE AGAIN
+   ↓
+COMPARE
+   ↓
+UNDERSTAND TRADE-OFFS
+```
 
-An optimization is not considered successful merely because it improves latency or cost. Later experiments must also examine its effect on output quality and reliability.
+An optimization is not successful merely because it improves latency or cost.
+
+It must also be evaluated for its effect on:
+
+```text
+QUALITY
+LATENCY
+COST
+THROUGHPUT
+TOKENS
+RELIABILITY
+```
+
+The frozen workload exists to make these comparisons fair, reproducible, and measurable.
+```
