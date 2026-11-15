@@ -26,6 +26,53 @@ REQUIRED_FIELDS = {
 }
 
 
+# JSON schema sent to providers for structured output. Shared by the OpenAI
+# and Anthropic providers; key and enum order is kept identical to the
+# original per-provider copies so requests stay byte-identical.
+TICKET_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "category": {
+            "type": "string",
+            "enum": [
+                "billing",
+                "technical",
+                "account",
+                "delivery",
+                "refund",
+                "fraud",
+                "general",
+            ],
+        },
+        "urgency": {
+            "type": "string",
+            "enum": [
+                "low",
+                "medium",
+                "high",
+            ],
+        },
+        "summary": {
+            "type": "string",
+        },
+        "suggested_reply": {
+            "type": "string",
+        },
+        "needs_escalation": {
+            "type": "boolean",
+        },
+    },
+    "required": [
+        "category",
+        "urgency",
+        "summary",
+        "suggested_reply",
+        "needs_escalation",
+    ],
+    "additionalProperties": False,
+}
+
+
 def validate_output(text):
     try:
         data = json.loads(text)

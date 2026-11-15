@@ -2,8 +2,19 @@
 
 venv/
 .env
+.env.*
+!.env.example
 __pycache__/
+.pytest_cache/
 
-data/
+# Frozen inputs in data/ (workload, dataset, prompts, policies, pricing) are
+# tracked so results are reproducible. Run outputs stay local.
+data/runs/
 
 node_modules/
+
+# Local tool state
+.claude/settings.local.json
+.impeccable/hook.cache.json
+.claude/skills/
+frontend/dist/

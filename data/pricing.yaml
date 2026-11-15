@@ -1,0 +1,31 @@
+# LLMForge pricing configuration
+#
+# Prices are expressed in USD per 1,000,000 tokens.
+
+currency: USD
+
+models:
+  fake:
+    input_per_1m_tokens: 0.00
+    output_per_1m_tokens: 0.00
+
+  gpt-5.6-luna:
+    input_per_1m_tokens: 0.20
+    output_per_1m_tokens: 1.20
+
+  # Price as hardcoded in the original model comparison script.
+  gpt-6-luna:
+    input_per_1m_tokens: 0.10
+    output_per_1m_tokens: 0.50
+
+  gpt-5.6-terra:
+    input_per_1m_tokens: 2.00
+    output_per_1m_tokens: 12.00
+
+  claude-haiku-4-5:
+    input_per_1m_tokens: 1.00
+    output_per_1m_tokens: 5.00
+
+  claude-sonnet-4-5:
+    input_per_1m_tokens: 3.00
+    output_per_1m_tokens: 15.00

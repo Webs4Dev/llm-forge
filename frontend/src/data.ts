@@ -37,14 +37,26 @@ export const modelQuality = [
   { metric: "Escalation F1", gpt56: 94.56, gpt6: 94.26 },
 ];
 
-export const promptQuality = [
-  { metric: "Category acc.", v1: 90, v2: 92 },
-  { metric: "Category F1", v1: 87.24, v2: 90.54 },
-  { metric: "Urgency acc.", v1: 82, v2: 80 },
-  { metric: "Urgency F1", v1: 80.85, v2: 79.17 },
-  { metric: "Escalation acc.", v1: 97, v2: 97 },
-  { metric: "Fact recall", v1: 41.87, v2: 42.86 },
-];
+// 100-case golden dataset, V1 vs V2 prompt. Anthropic V1 was added to
+// RESULTS.md on 2026-11-14 (first answer per ticket from the baseline run).
+export const promptQuality = {
+  openai: [
+    { metric: "Category acc.", v1: 90, v2: 92 },
+    { metric: "Category F1", v1: 87.24, v2: 90.54 },
+    { metric: "Urgency acc.", v1: 82, v2: 80 },
+    { metric: "Urgency F1", v1: 80.85, v2: 79.17 },
+    { metric: "Escalation acc.", v1: 97, v2: 97 },
+    { metric: "Escalation F1", v1: 94.56, v2: 94.56 },
+  ],
+  anthropic: [
+    { metric: "Category acc.", v1: 80, v2: 88 },
+    { metric: "Category F1", v1: 78.33, v2: 86.64 },
+    { metric: "Urgency acc.", v1: 79, v2: 82 },
+    { metric: "Urgency F1", v1: 77.66, v2: 81.33 },
+    { metric: "Escalation acc.", v1: 97, v2: 85 },
+    { metric: "Escalation F1", v1: 94.56, v2: 78.49 },
+  ],
+};
 
 export const raceStages = [
   { id: "baseline", label: "Baseline", note: "300 requests, nothing optimized", openai: 1.8198, anthropic: 2.1837 },

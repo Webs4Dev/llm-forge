@@ -1,9 +1,36 @@
+from pathlib import Path
+
 import yaml
 
 
-def load_pricing(path: str) -> dict:
+PRICING_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "pricing.yaml"
+)
+
+
+def load_pricing(path=PRICING_PATH) -> dict:
     with open(path, "r", encoding="utf-8") as file:
         return yaml.safe_load(file)
+
+
+def get_model_prices(model: str, path=PRICING_PATH) -> tuple:
+    """Return (input_per_1m, output_per_1m) for a model from pricing.yaml."""
+    models = load_pricing(path)["models"]
+
+    if model not in models:
+        raise ValueError(
+            f"No pricing for model '{model}' in {path}. "
+            f"Add it before running."
+        )
+
+    prices = models[model]
+
+    return (
+        prices["input_per_1m_tokens"],
+        prices["output_per_1m_tokens"],
+    )
 
 
 def calculate_cost(

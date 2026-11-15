@@ -20,7 +20,7 @@ DATASET_PATH = (
 def test_load_dataset():
     cases = load_dataset(DATASET_PATH)
 
-    assert len(cases) == 30
+    assert len(cases) == 100
 
 
 def test_first_case_structure():

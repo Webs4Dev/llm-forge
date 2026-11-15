@@ -4,12 +4,18 @@ from src.providers.base import GenerationResult, Provider
 
 
 class FakeProvider(Provider):
+    """Deterministic provider for infrastructure experiments (no API cost).
+
+    It returns the whole response at once, so TTFT equals total latency
+    whether or not streaming is requested.
+    """
+
     def __init__(
         self,
         response,
-        input_tokens,
-        output_tokens,
-        latency,
+        input_tokens=100,
+        output_tokens=50,
+        latency=0.0,
     ):
         self.model = "fake"
         self.response = response
@@ -23,15 +29,14 @@ class FakeProvider(Provider):
         user_prompt: str,
         temperature: float = 0.0,
         max_tokens: int = 500,
+        stream: bool = False,
     ) -> GenerationResult:
 
         start = time.perf_counter()
 
         time.sleep(self.latency)
 
-        end = time.perf_counter()
-
-        total_latency = end - start
+        total_latency = time.perf_counter() - start
 
         return GenerationResult(
             text=self.response,
