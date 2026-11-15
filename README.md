@@ -5,6 +5,8 @@ production LLM apps (caching, concurrency, model choice, prompt compression). Ea
 same frozen workload, and the result is judged by latency, cost and quality together, with a check
 that the difference is bigger than run-to-run noise.
 
+**Live dashboard:** [llmforge.netlify.app](https://llmforge.netlify.app)
+
 ![The dashboard overview: a latency race between OpenAI and Anthropic, workload stats, and baseline latency and cost charts](docs/screenshots/overview.png)
 
 ---
@@ -174,6 +176,9 @@ cd frontend
 npm install
 npm run dev                       # http://localhost:5173
 ```
+
+The live version is at [llmforge.netlify.app](https://llmforge.netlify.app), built from
+`frontend/` with the settings in [netlify.toml](netlify.toml).
 
 The dashboard is a static site with no backend. Its numbers are copied from
 [RESULTS.md](RESULTS.md). Sections have shareable links (`#baseline`, `#cache`, `#concurrency`,

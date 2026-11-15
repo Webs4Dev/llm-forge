@@ -1,0 +1,24 @@
+# Netlify build settings for the static results dashboard in frontend/.
+# The dashboard has no backend and no env vars; it only shows numbers copied from RESULTS.md.
+
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"          # relative to base, so frontend/dist
+
+[build.environment]
+  NODE_VERSION = "24"       # pin an LTS so builds don't change when Netlify's default does
+
+# Navigation uses #hash links, so no SPA redirect rule is needed.
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "DENY"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
