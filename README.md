@@ -55,6 +55,8 @@ Evaluation includes:
 -   fact recall
 -   forbidden-claim detection
 ## Architecture
+Target architecture (the API, router and PostgreSQL layers are planned and
+not built yet; today every experiment runs as an offline script):
 ``` text
 Client → API → Input Guard → Router → Cache → LLM → Output Validation → Cache Write → Response
                                       ├─ Exact Cache
@@ -64,8 +66,8 @@ Redis      → persistent/shared caching
 ```
 Offline evaluation remains separate from the online request path.
 ## Technology Stack
-**Backend:** Python, FastAPI, PostgreSQL, Redis, NumPy, pandas,
-scikit-learn.
+**Backend:** Python, Redis, NumPy, scikit-learn, sentence-transformers.
+FastAPI and PostgreSQL are planned for the online path.
 **Providers:** OpenAI, Anthropic, and FakeProvider for deterministic
 local testing.
 **Frontend:** React, TypeScript, Vite, Recharts, Lucide React, CSS.
@@ -76,19 +78,23 @@ llm-forge/
 │   ├── datasets/
 │   ├── policy/
 │   ├── prompts/
-│   ├── runs/
-│   └── workloads/
+│   ├── runs/          (local only, gitignored)
+│   ├── workloads/
+│   └── pricing.yaml
 ├── scripts/
+│   └── smoke/         (manual checks; some call paid APIs)
 ├── src/
 │   ├── core/
 │   ├── evaluation/
+│   ├── experiments/   (shared harness, run loader, statistics)
 │   ├── optimization/
 │   └── providers/
-├── tests/
+├── tests/pytests/
 ├── frontend/
-├── .env
+├── .env.example
 ├── docker-compose.yaml
-├── pricing.yaml
+├── pytest.ini
+├── requirements.txt
 ├── RESULTS.md
 ├── WORKLOAD.md
 └── README.md
@@ -101,16 +107,21 @@ A generation result contains:
 text
 input_tokens
 output_tokens
-ttft
+ttft            (only measured when streaming; None otherwise)
 total_latency
+cache_hit
 ```
+
+TTFT can only be measured on a streamed response. Runs recorded before
+streaming support stored total latency in the `ttft` field, so their TTFT
+values are not real TTFT. Use `--stream` to measure it.
 ### FakeProvider
 FakeProvider provides deterministic local behavior with configurable
 response, token counts, and artificial latency. It is useful for
 infrastructure experiments without API costs and is not a production
 model.
 ## Pricing
-Provider pricing is centralized in `pricing.yaml`.
+Provider pricing is centralized in `data/pricing.yaml`.
 Experiment scripts should load prices from this file instead of
 hardcoding them. This keeps cost calculations consistent across
 experiments.
@@ -222,13 +233,18 @@ reliability.
 Typical test areas include provider behavior, schema validation, cache
 behavior, Redis cache behavior, dataset validation, evaluation, and
 concurrency.
-Run all tests:
+Run all tests (free: no API calls, no Redis needed):
 ``` bash
 pytest
 ```
 Run one test:
 ``` bash
-pytest tests/test_schema.py
+pytest tests/pytests/test_schema.py::test_valid_output
+```
+Manual smoke checks live in `scripts/smoke/`. The provider ones make real
+(paid) API calls:
+``` bash
+python -m scripts.smoke.openai_provider
 ```
 ## Docker
 Start supporting services:
@@ -249,19 +265,35 @@ Create and activate a Python environment:
 python -m venv venv
 source venv/bin/activate
 ```
-Install dependencies according to the current project configuration.
-Set provider credentials in `.env`:
-``` text
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
+Install dependencies:
+``` bash
+pip install -r requirements.txt
 ```
-Never commit API keys.
+Copy `.env.example` to `.env` and set the provider keys. Never commit API keys.
 ## Running Experiments
+Every experiment script uses the shared harness in `src/experiments/` and
+accepts the same options:
+``` text
+--provider fake|openai|anthropic   --model <id in data/pricing.yaml>
+--prompt-version v1|v2             --concurrency N
+--stream      (measure real TTFT)  --unique   (100 unique tickets only)
+--limit N     (sanity checks)      --repeats N (noise measurement)
+```
+Each run writes `data/runs/<experiment>/<timestamp>_....jsonl` plus a
+`.meta.json` with the config, summary, git commit, input file hashes and SDK
+versions. Runs never overwrite each other.
+
 Typical workflow:
 ``` bash
-python -m scripts.run_baseline
-python -m scripts.summarize
+python -m scripts.run_baseline --provider fake --limit 10   # free check
+python -m scripts.run_baseline --provider openai --unique
+python -m scripts.summarize <run_file>                      # with 95% CIs
+python -m scripts.summarize --compare <run_a> <run_b>       # beyond noise?
+python -m scripts.evaluate <run_file>                       # quality
+python -m scripts.check_quality <candidate> --reference <baseline>
 ```
+`--unique` cuts API cost by two thirds when no cache is involved; keep the
+full workload for cache experiments.
 Then:
 1.  Implement one optimization.
 2.  Run the same frozen workload.

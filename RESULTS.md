@@ -1,5 +1,31 @@
 # LLMForge Results
 
+## Measurement Notes (added 2026-11-14)
+
+A review of the experiment code found the following about the results below.
+The numbers are unchanged; these notes say how to read them.
+
+- **TTFT was not measured.** No run streamed, so every "TTFT" value below is
+  total latency. Real TTFT needs `--stream` (now supported).
+- **Each configuration ran once.** Run-to-run drift is real: the OpenAI
+  baseline and the identical GPT-5.6 Luna configuration in the model
+  comparison differ by +0.51s mean and +0.99s P95 latency, far outside the
+  within-run 95% bootstrap interval. Latency differences smaller than that
+  should not be treated as wins. (Anthropic baseline vs. its cache-miss
+  requests: within noise.)
+- **Concurrency requests did not use the policy or prompt template.** The
+  concurrency script sent the raw ticket with an empty system prompt, so its
+  latencies come from shorter requests than the baseline and are not directly
+  comparable. Its run outputs were not saved. The script is fixed.
+- **Temperature was never sent.** Configs say `temperature=0.0`, but neither
+  provider passes it to the API, so all runs used the API default.
+- **Quality scope.** `scripts/evaluate.py` scores every request (300,
+  including duplicates). Some quality tables below were scored on 100 cases,
+  so the two can differ by a few points.
+- **Prompt V2 quality regression.** `scripts/check_quality.py` (2-point
+  tolerance) flags V2 against the V1 baseline: Anthropic escalation macro-F1
+  0.928 → 0.783, OpenAI urgency macro-F1 0.752 → 0.725 (all-request scoring).
+
 ## Baseline
 
 | Metric | Fake | OpenAI | Anthropic |
@@ -275,19 +301,28 @@ The V2 outputs were evaluated against the full 100-case golden dataset.
 | Fact Recall | 41.87% | **42.86%** |
 | Forbidden-Claim Rate | 1.00% | **0%** |
 
-### Quality Evaluation — Anthropic V2
+### Quality Evaluation — Anthropic
 
-| Metric | V2 |
-|---|---:|
-| Schema Validity | 100% |
-| Category Accuracy | 88.00% |
-| Category Macro-F1 | 86.64% |
-| Urgency Accuracy | 82.00% |
-| Urgency Macro-F1 | 81.33% |
-| Escalation Accuracy | 85.00% |
-| Escalation Macro-F1 | 78.49% |
-| Fact Recall | 36.95% |
-| Forbidden-Claim Rate | 0% |
+| Metric | V1 | V2 |
+|---|---:|---:|
+| Schema Validity | 100% | 100% |
+| Category Accuracy | 80.00% | **88.00%** |
+| Category Macro-F1 | 78.33% | **86.64%** |
+| Urgency Accuracy | 79.00% | **82.00%** |
+| Urgency Macro-F1 | 77.66% | **81.33%** |
+| Escalation Accuracy | **97.00%** | 85.00% |
+| Escalation Macro-F1 | **94.56%** | 78.49% |
+| Fact Recall | — | 36.95% |
+| Forbidden-Claim Rate | 0% | 0% |
+
+> The Anthropic V1 column was added on 2026-11-14 from the existing
+> `baseline_anthropic.jsonl` (first answer per ticket, 100 cases), with no new
+> API calls. The same method reproduces the V2 classification numbers above
+> exactly. Fact recall is omitted for V1 because the current evaluator's fact
+> recall differs slightly from the original evaluation.
+>
+> V2 improved Anthropic's category and urgency classification but reduced
+> escalation macro-F1 by about 16 points.
 
 ### Prompt Optimization Observations
 

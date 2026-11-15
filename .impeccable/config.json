@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-11-15T07:01:54.268Z",
+        "reason": "Claude, earlier design pass: Geist body paired on purpose with Bricolage Grotesque display; predates this session's motion work"
+      }
+    ]
+  }
+}
