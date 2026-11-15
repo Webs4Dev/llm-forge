@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   BrainCircuit,
@@ -13,7 +13,8 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { Baseline, Cache, Concurrency, Models, Overview, Prompt } from "./pages";
 import type { Section } from "./pages";
-import { Key, SvgDefs } from "./ui";
+import { Key, Logo, SvgDefs } from "./ui";
+import { useReveal } from "./motion";
 
 const navItems: { id: Section; label: string; icon: LucideIcon; number?: string }[] = [
   { id: "overview", label: "Overview", icon: Gauge },
@@ -34,6 +35,8 @@ export default function App() {
   const [section, setSection] = useState<Section>(fromHash);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  useReveal(contentRef, section);
 
   useEffect(() => {
     const onHash = () => setSection(fromHash());
@@ -64,7 +67,7 @@ export default function App() {
       <SvgDefs />
       <aside className={`sidebar ${mobileOpen ? "mobile-open" : ""}`}>
         <div className="brand">
-          <div className="brand-mark" aria-hidden="true"><span>L</span><i /></div>
+          <div className="brand-mark" aria-hidden="true"><Logo /></div>
           {!collapsed && <div><strong>LLMForge</strong><small>Experiment lab</small></div>}
           <button className="collapse" onClick={() => setCollapsed(!collapsed)} aria-label="Collapse sidebar">
             {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
@@ -96,7 +99,7 @@ export default function App() {
             <div className="status-pill"><span className="status-dot" />Experiments recorded</div>
           </div>
         </header>
-        <div className="content" key={section}>{content}</div>
+        <div className="content" key={section} ref={contentRef}>{content}</div>
         <footer>LLMForge results dashboard. Values are the recorded experiments in RESULTS.md.</footer>
       </main>
     </div>

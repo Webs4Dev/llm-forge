@@ -20,6 +20,15 @@ export const fillFor = (t: Tone, ghost = false) =>
 const reduceMotion = () =>
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+/** LLMForge mark: an anvil made of three shrinking bars (measure, then optimize) under an orange spark. */
+export function Logo({ size = 22 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 -1.5 24 24" aria-hidden="true" focusable="false">
+      <path d="M3 8.5H21V12H9.2C6.6 12 4.5 10.7 3 8.5Z" fill="#fff" /><rect x="10" y="12" width="7" height="4" fill="#fff" /><rect x="7" y="16" width="13" height="3.6" rx="1" fill="#fff" /><path d="M18.6 1.4L19.5 3.2L21.3 4.1L19.5 5L18.6 6.8L17.7 5L15.9 4.1L17.7 3.2Z" fill="#ff7b1c" />
+    </svg>
+  );
+}
+
 /** Hatch patterns used by every chart for "before / old version" bars. */
 export function SvgDefs() {
   return (
@@ -286,8 +295,8 @@ export function CompareTable({
             )}
             <tr>
               <th>Metric</th>
-              {cols.map((c) => (
-                <th key={c.label + (c.sub ?? "")} className="col-head">
+              {cols.map((c, ci) => (
+                <th key={ci} className="col-head">
                   <Swatch tone={c.tone} ghost={c.ghost} />
                   {c.label}
                   {c.sub && <small>{c.sub}</small>}
