@@ -1,0 +1,20 @@
+# Direct dependencies, pinned to the versions the recorded runs used.
+# Python 3.14. Install with: pip install -r requirements.txt
+
+# Providers
+anthropic==1.9.0
+openai==3.20.0
+python-dotenv==1.2.3
+
+# Cache
+redis==8.1.0
+
+# Config, statistics, evaluation
+PyYAML==6.0.3
+numpy==2.5.3
+scikit-learn==1.9.1
+sentence-transformers==6.1.0   # summary similarity (pulls in torch)
+tiktoken==0.14.0               # scripts/compare_prompt_tokens.py
+
+# Tests
+pytest==9.1.1
